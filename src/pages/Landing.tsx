@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Play, Bot, Zap, Crown, Github, Twitter } from "lucide-react";
+import { Play, Bot, Zap, Crown } from "lucide-react";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -12,11 +12,7 @@ export default function Landing() {
   const LOGO_URL = "https://harmless-tapir-303.convex.cloud/api/storage/da2ed97a-9fa4-4aa1-84b2-9d3d6d27cd33";
 
   const handleGetStarted = () => {
-    if (isAuthenticated) {
-      navigate("/menu");
-    } else {
-      navigate("/auth");
-    }
+    navigate("/menu");
   };
 
   return (
@@ -71,20 +67,8 @@ export default function Landing() {
             </span>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            {!isLoading && (
-              <Button
-                onClick={handleGetStarted}
-                className="bg-gradient-to-r from-cyan-500 to-pink-500 text-black font-mono font-bold tracking-wider hover:from-cyan-400 hover:to-pink-400 transition-all duration-300"
-              >
-                {isAuthenticated ? "PLAY NOW" : "GET STARTED"}
-              </Button>
-            )}
-          </motion.div>
+          {/* Removed login/auth CTA from navbar */}
+          <div />
         </div>
       </nav>
 
