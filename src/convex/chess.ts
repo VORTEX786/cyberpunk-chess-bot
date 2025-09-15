@@ -42,6 +42,9 @@ export const makeMove = mutation({
     gameId: v.id("games"),
     from: v.object({ row: v.number(), col: v.number() }),
     to: v.object({ row: v.number(), col: v.number() }),
+    promotion: v.optional(
+      v.union(v.literal("Q"), v.literal("R"), v.literal("B"), v.literal("N"))
+    ),
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
@@ -71,10 +74,15 @@ export const makeMove = mutation({
 
     const { newBoard, capturedPiece } = applyMove(board, args.from, args.to);
 
-    // Auto-promotion to Queen if pawn reaches last rank
+    // Promotion: if a white pawn reaches last rank, use chosen piece or default to Queen
     const movedPiece = newBoard[args.to.row][args.to.col];
     if (movedPiece === "P" && args.to.row === 0) {
-      newBoard[args.to.row][args.to.col] = "Q";
+      const promo = args.promotion ?? "Q";
+      // Safety: only allow Q/R/B/N
+      const allowed: Array<"Q" | "R" | "B" | "N"> = ["Q", "R", "B", "N"];
+      newBoard[args.to.row][args.to.col] = allowed.includes(promo as any)
+        ? promo
+        : "Q";
     }
 
     // Update captured pieces (captured by white are black pieces)

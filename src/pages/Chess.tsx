@@ -11,6 +11,7 @@ import { ArrowLeft, RotateCcw, Home } from "lucide-react";
 import ChessBoard from "@/components/ChessBoard";
 import CapturedPieces from "@/components/CapturedPieces";
 import GameStatus from "@/components/GameStatus";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Chess() {
   const { gameId } = useParams<{ gameId: string }>();
@@ -24,6 +25,10 @@ export default function Chess() {
   const makeBotMove = useMutation(api.chess.makeBotMove);
 
   const [isProcessingMove, setIsProcessingMove] = useState(false);
+  const [promotionPending, setPromotionPending] = useState<{
+    from: { row: number; col: number };
+    to: { row: number; col: number };
+  } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -53,6 +58,15 @@ export default function Chess() {
   const handleMove = async (from: { row: number; col: number }, to: { row: number; col: number }) => {
     if (!game || game.currentTurn !== "white" || isProcessingMove) return;
 
+    // If move is a pawn promotion, open selection modal instead of sending immediately
+    const movingPiece = game.board[from.row][from.col];
+    const isWhitePawnPromotion = movingPiece === "P" && to.row === 0;
+
+    if (isWhitePawnPromotion) {
+      setPromotionPending({ from, to });
+      return;
+    }
+
     setIsProcessingMove(true);
     try {
       await makeMove({
@@ -65,6 +79,26 @@ export default function Chess() {
       console.error("Move error:", error);
       toast.error("Invalid move");
     } finally {
+      setIsProcessingMove(false);
+    }
+  };
+
+  const confirmPromotion = async (promo: "Q" | "R" | "B" | "N") => {
+    if (!game || !promotionPending) return;
+    setIsProcessingMove(true);
+    try {
+      await makeMove({
+        gameId: game._id,
+        from: promotionPending.from,
+        to: promotionPending.to,
+        promotion: promo,
+      });
+      toast.success(`Promoted to ${promo === "Q" ? "Queen" : promo === "R" ? "Rook" : promo === "B" ? "Bishop" : "Knight"}!`);
+    } catch (error) {
+      console.error("Promotion move error:", error);
+      toast.error("Promotion failed");
+    } finally {
+      setPromotionPending(null);
       setIsProcessingMove(false);
     }
   };
@@ -207,6 +241,29 @@ export default function Chess() {
             </div>
           </motion.div>
         )}
+
+        {/* Promotion Dialog */}
+        <Dialog open={!!promotionPending} onOpenChange={(open) => !open && setPromotionPending(null)}>
+          <DialogContent className="bg-black/90 border-cyan-500/50 text-cyan-200">
+            <DialogHeader>
+              <DialogTitle className="font-mono tracking-wider text-cyan-400">Choose Promotion</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <Button onClick={() => confirmPromotion("Q")} className="bg-cyan-500 text-black font-mono font-bold hover:bg-cyan-400">
+                Queen ♕
+              </Button>
+              <Button onClick={() => confirmPromotion("R")} variant="outline" className="border-cyan-500 text-cyan-400 font-mono hover:bg-cyan-500/10">
+                Rook ♖
+              </Button>
+              <Button onClick={() => confirmPromotion("B")} variant="outline" className="border-cyan-500 text-cyan-400 font-mono hover:bg-cyan-500/10">
+                Bishop ♗
+              </Button>
+              <Button onClick={() => confirmPromotion("N")} variant="outline" className="border-cyan-500 text-cyan-400 font-mono hover:bg-cyan-500/10">
+                Knight ♘
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
