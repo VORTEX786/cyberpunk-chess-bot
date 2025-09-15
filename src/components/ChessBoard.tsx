@@ -1,6 +1,252 @@
 import { motion } from "framer-motion";
 import { useState, useCallback } from "react";
 
+// Add chess rule helpers (mirrored from backend, without en passant/castling)
+function getPieceColor(piece: string): "white" | "black" {
+  return piece === piece.toUpperCase() ? "white" : "black";
+}
+
+function isPathBlocked(
+  board: (string | null)[][],
+  from: { row: number; col: number },
+  to: { row: number; col: number }
+): boolean {
+  const rowStep = to.row > from.row ? 1 : to.row < from.row ? -1 : 0;
+  const colStep = to.col > from.col ? 1 : to.col < from.col ? -1 : 0;
+
+  let currentRow = from.row + rowStep;
+  let currentCol = from.col + colStep;
+
+  while (currentRow !== to.row || currentCol !== to.col) {
+    if (board[currentRow][currentCol] !== null) return true;
+    currentRow += rowStep;
+    currentCol += colStep;
+  }
+  return false;
+}
+
+function isValidGeometry(
+  board: (string | null)[][],
+  from: { row: number; col: number },
+  to: { row: number; col: number }
+): boolean {
+  const piece = board[from.row][from.col];
+  if (!piece) return false;
+
+  const targetPiece = board[to.row][to.col];
+
+  // Can't capture own piece
+  if (
+    targetPiece &&
+    ((piece === piece.toUpperCase() && targetPiece === targetPiece.toUpperCase()) ||
+      (piece === piece.toLowerCase() && targetPiece === targetPiece.toLowerCase()))
+  ) {
+    return false;
+  }
+
+  const rowDiff = Math.abs(to.row - from.row);
+  const colDiff = Math.abs(to.col - from.col);
+
+  switch (piece.toLowerCase()) {
+    case "p": {
+      const isWhite = piece === piece.toUpperCase();
+      const direction = isWhite ? -1 : 1;
+      const startRow = isWhite ? 6 : 1;
+
+      // Forward moves
+      if (from.col === to.col) {
+        if (rowDiff === 1 && to.row === from.row + direction && !targetPiece) return true;
+        if (
+          rowDiff === 2 &&
+          from.row === startRow &&
+          to.row === from.row + 2 * direction &&
+          !targetPiece &&
+          board[from.row + direction][from.col] === null
+        ) {
+          return true;
+        }
+        return false;
+      }
+
+      // Diagonal capture
+      if (rowDiff === 1 && colDiff === 1 && to.row === from.row + direction && !!targetPiece) {
+        return true;
+      }
+
+      return false;
+    }
+
+    case "r":
+      return (rowDiff === 0 || colDiff === 0) && !isPathBlocked(board, from, to);
+
+    case "n":
+      return (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
+
+    case "b":
+      return rowDiff === colDiff && !isPathBlocked(board, from, to);
+
+    case "q":
+      return (
+        ((rowDiff === 0 || colDiff === 0) || rowDiff === colDiff) &&
+        !isPathBlocked(board, from, to)
+      );
+
+    case "k":
+      return rowDiff <= 1 && colDiff <= 1;
+
+    default:
+      return false;
+  }
+}
+
+function findKingPosition(
+  board: (string | null)[][],
+  side: "white" | "black"
+): { row: number; col: number } {
+  const kingChar = side === "white" ? "K" : "k";
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c] === kingChar) return { row: r, col: c };
+    }
+  }
+  return { row: 0, col: 0 };
+}
+
+function isSquareAttacked(
+  board: (string | null)[][],
+  square: { row: number; col: number },
+  bySide: "white" | "black"
+): boolean {
+  // Knights
+  const knightDeltas = [
+    [2, 1],
+    [2, -1],
+    [-2, 1],
+    [-2, -1],
+    [1, 2],
+    [1, -2],
+    [-1, 2],
+    [-1, -2],
+  ];
+  for (const [dr, dc] of knightDeltas) {
+    const r = square.row + dr;
+    const c = square.col + dc;
+    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+      const p = board[r][c];
+      if (p && getPieceColor(p) === bySide && p.toLowerCase() === "n") return true;
+    }
+  }
+
+  // Pawns
+  const pawnDir = bySide === "white" ? -1 : 1;
+  for (const dc of [-1, 1]) {
+    const r = square.row + pawnDir;
+    const c = square.col + dc;
+    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+      const p = board[r][c];
+      if (p && getPieceColor(p) === bySide && p.toLowerCase() === "p") return true;
+    }
+  }
+
+  // King adjacency
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const r = square.row + dr;
+      const c = square.col + dc;
+      if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+        const p = board[r][c];
+        if (p && getPieceColor(p) === bySide && p.toLowerCase() === "k") return true;
+      }
+    }
+  }
+
+  // Rook/Queen orthogonal
+  const orthDirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  for (const [dr, dc] of orthDirs) {
+    let r = square.row + dr;
+    let c = square.col + dc;
+    while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+      const p = board[r][c];
+      if (p) {
+        if (getPieceColor(p) === bySide) {
+          const t = p.toLowerCase();
+          if (t === "r" || t === "q") return true;
+        }
+        break;
+      }
+      r += dr;
+      c += dc;
+    }
+  }
+
+  // Bishop/Queen diagonal
+  const diagDirs = [
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ];
+  for (const [dr, dc] of diagDirs) {
+    let r = square.row + dr;
+    let c = square.col + dc;
+    while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+      const p = board[r][c];
+      if (p) {
+        if (getPieceColor(p) === bySide) {
+          const t = p.toLowerCase();
+          if (t === "b" || t === "q") return true;
+        }
+        break;
+      }
+      r += dr;
+      c += dc;
+    }
+  }
+
+  return false;
+}
+
+function applyMove(
+  board: (string | null)[][],
+  from: { row: number; col: number },
+  to: { row: number; col: number }
+): (string | null)[][] {
+  const newBoard = board.map((row) => [...row]);
+  const piece = newBoard[from.row][from.col];
+  newBoard[from.row][from.col] = null;
+  newBoard[to.row][to.col] = piece;
+
+  // Auto-queen on last rank for UI highlight logic; actual server promotion handles state
+  if (piece === "P" && to.row === 0) newBoard[to.row][to.col] = "Q";
+  if (piece === "p" && to.row === 7) newBoard[to.row][to.col] = "q";
+
+  return newBoard;
+}
+
+function isLegalMoveClient(
+  board: (string | null)[][],
+  from: { row: number; col: number },
+  to: { row: number; col: number },
+  side: "white" | "black"
+): boolean {
+  const piece = board[from.row][from.col];
+  if (!piece) return false;
+  if (getPieceColor(piece) !== side) return false;
+
+  if (!isValidGeometry(board, from, to)) return false;
+
+  const newBoard = applyMove(board, from, to);
+  const kingPos = findKingPosition(newBoard, side);
+  const attacked = isSquareAttacked(newBoard, kingPos, side === "white" ? "black" : "white");
+  return !attacked;
+}
+
 interface ChessBoardProps {
   board: (string | null)[][];
   onMove: (from: { row: number; col: number }, to: { row: number; col: number }) => void;
@@ -24,6 +270,34 @@ export default function ChessBoard({
   const [selectedSquare, setSelectedSquare] = useState<{ row: number; col: number } | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<{ row: number; col: number }[]>([]);
 
+  // Replace previous basic validator with full legality check
+  const isLegalMoveForCurrent = useCallback((from: { row: number; col: number }, to: { row: number; col: number }) => {
+    return isLegalMoveClient(board, from, to, currentTurn);
+  }, [board, currentTurn]);
+
+  // Generate only legal moves for the selected piece, respecting king safety
+  const getPossibleMoves = useCallback((from: { row: number; col: number }) => {
+    const moves: { row: number; col: number }[] = [];
+    const piece = board[from.row][from.col];
+    if (!piece) return moves;
+
+    // Only allow generating for the current side
+    const isWhitePiece = piece === piece.toUpperCase();
+    if ((currentTurn === "white" && !isWhitePiece) || (currentTurn === "black" && isWhitePiece)) {
+      return moves;
+    }
+
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        if (row === from.row && col === from.col) continue;
+        if (isLegalMoveClient(board, from, { row, col }, currentTurn)) {
+          moves.push({ row, col });
+        }
+      }
+    }
+    return moves;
+  }, [board, currentTurn]);
+
   const isValidMove = useCallback((from: { row: number; col: number }, to: { row: number; col: number }) => {
     const piece = board[from.row][from.col];
     if (!piece) return false;
@@ -37,24 +311,6 @@ export default function ChessBoard({
     // Add more sophisticated move validation here
     return true;
   }, [board, currentTurn]);
-
-  const getPossibleMoves = useCallback((from: { row: number; col: number }) => {
-    const moves: { row: number; col: number }[] = [];
-    const piece = board[from.row][from.col];
-    
-    if (!piece) return moves;
-
-    // Simplified move generation - check all squares
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        if (isValidMove(from, { row, col })) {
-          moves.push({ row, col });
-        }
-      }
-    }
-
-    return moves;
-  }, [board, isValidMove]);
 
   const handleSquareClick = useCallback((row: number, col: number) => {
     if (!isPlayerTurn) return;
