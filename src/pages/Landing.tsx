@@ -8,6 +8,9 @@ export default function Landing() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Add centralized logo URL
+  const LOGO_URL = "https://harmless-tapir-303.convex.cloud/api/storage/da2ed97a-9fa4-4aa1-84b2-9d3d6d27cd33";
+
   const handleGetStarted = () => {
     if (isAuthenticated) {
       navigate("/menu");
@@ -57,7 +60,7 @@ export default function Landing() {
             transition={{ duration: 0.6 }}
           >
             <img
-              src="./logo.svg"
+              src={LOGO_URL}
               alt="Cyber Chess"
               width={40}
               height={40}
@@ -259,7 +262,7 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
               <img
-                src="./logo.svg"
+                src={LOGO_URL}
                 alt="Cyber Chess"
                 width={32}
                 height={32}
