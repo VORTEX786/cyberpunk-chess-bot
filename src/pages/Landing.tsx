@@ -275,15 +275,7 @@ export default function Landing() {
             
             <div className="flex items-center gap-4">
               <span className="text-gray-400 font-mono text-sm">
-                Powered by{" "}
-                <a
-                  href="https://vly.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-cyan-400 hover:text-cyan-300 transition-colors"
-                >
-                  vly.ai
-                </a>
+                Made By Ziaul
               </span>
             </div>
           </div>
